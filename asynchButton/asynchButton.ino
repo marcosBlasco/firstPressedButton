@@ -15,17 +15,18 @@
   #include <ESPAsyncTCP.h>
 #endif
 #include <ESPAsyncWebServer.h>
+#include <Preferences.h>
 
 int result[5] = {0, 0, 0, 0, 0};
 int gameState = 1; //'1' ready, '0' result;
 
 // Replace with your network credentials
-const char* ssid = "Red-hogar";
-const char* password = "Caballobotaelefante2";
 
 const char* PARAM_INPUT_1 = "output";
 const char* PARAM_INPUT_2 = "state";
 const char* PARAM_INPUT_3 = "team";
+const char* PARAM_INPUT_4 = "ssid";
+const char* PARAM_INPUT_5 = "pass";
 
 const int output1 = 13;     //related with the White button
 const int buttonPin1 = 25;  
@@ -57,6 +58,33 @@ unsigned long debounceDelay = 50;    // the debounce time; increase if the outpu
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
+Preferences preferences;
+
+const char credentials_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html>
+<head>
+  <title>Credenciales</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html {font-family: Arial; display: inline-block; text-align: center;}
+    h2 {font-size: 3.0rem;}
+    h3 {font-size: 2.0rem;}
+    p {font-size: 3.0rem;}
+    body {max-width: 600px; margin:0px auto; padding-bottom: 25px;}
+  </style>
+</head>
+
+<body>
+<h3>Configuration AP</h3><br>
+<form action='' method='POST'>WiFi connection failed. Enter valid parameters, please.<br><br>
+SSID:<br><input type='text' name='ssid'><br>
+Password:<br><input type='password' name='pass'><br><br>
+<input type='submit' value='Submit'></form>
+
+  %BUTTONPLACEHOLDER%
+</body>
+</html>
+)rawliteral";
 
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML><html>
@@ -334,7 +362,15 @@ String processor(const String& var){
   return String();
 }
 
-
+// Replaces placeholder with button section in your web page
+String processorCredentials(const String& var){
+  //Serial.println(var);
+  if(var == "BUTTONPLACEHOLDER"){
+    String buttons ="";
+    return buttons;
+  }
+  return String();
+}
 
 String outputState(int value){
   if(digitalRead(value)){
@@ -403,6 +439,27 @@ void IRAM_ATTR interruptHndlerButton5() {
     }
 }
 
+void configAP() {
+
+  //WiFiServer configWebServer(80);
+  // Create AsyncWebServer object on port 80
+  
+
+  WiFi.mode(WIFI_AP_STA); // starts the default AP (factory default or setup as persistent)
+  
+  Serial.print("Connect your computer to the WiFi network ");
+#ifdef ESP32
+  Serial.print("to SSID of you ESP32"); // no getter for SoftAP SSID
+#else
+  Serial.print(WiFi.softAPSSID());
+#endif
+  Serial.println();
+  IPAddress ip = WiFi.softAPIP();
+  Serial.print("and enter http://");
+  Serial.print(ip);
+  Serial.println(" in a Web browser");
+}
+
 void setup(){
   // Serial port for debugging purposes
   Serial.begin(115200);
@@ -427,19 +484,66 @@ void setup(){
   digitalWrite(output5, HIGH);
   pinMode(buttonPin5, INPUT);
   
-  // Connect to Wi-Fi
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi..");
-  }
+  
 
-  // Print ESP Local IP Address
-  Serial.println(WiFi.localIP());
+ 
 
   // Route for root / web page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send_P(200, "text/html", index_html, processor);
+  });
+
+   // Iniciar las preferencias
+  preferences.begin("my-app", false); // "my-app" es el namespace, false es para lectura/escritura
+
+  String ssid = preferences.getString("ssid", "noSSIDStored");
+  String pass = preferences.getString("pass", "noPassStored");
+
+  Serial.println(ssid);
+  Serial.println(pass);
+  // Connect to Wi-Fi
+  WiFi.begin(ssid, pass);
+  // while (WiFi.status() != WL_CONNECTED) {
+  //   delay(1000);
+  //   Serial.println("Connecting to WiFi..");
+  // }
+
+  // waiting for connection to remembered  Wifi network
+  Serial.println("Waiting for connection to WiFi");
+  WiFi.waitForConnectResult(10000);
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println();
+    Serial.println("Could not connect to WiFi. Starting configuration AP...");
+    configAP();
+  } else {
+    Serial.println("WiFi connected");
+    // Print ESP Local IP Address
+    Serial.println(WiFi.localIP());
+  }
+
+  // Route for root / web page
+  server.on("/connect", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/html", credentials_html, processorCredentials);
+  });
+
+  server.on("/connect", HTTP_POST, [] (AsyncWebServerRequest *request) {
+    String inputMessage1;
+    String inputMessage2;
+    // GET input1 value on <ESP_IP>/update?output=<inputMessage1>&state=<inputMessage2>
+    if (request->hasParam(PARAM_INPUT_4, true)&&request->hasParam(PARAM_INPUT_5, true)) {
+      inputMessage1 = request->getParam(PARAM_INPUT_4, true)->value();
+      inputMessage2 = request->getParam(PARAM_INPUT_5, true)->value();
+    }
+    Serial.print("SSID: ");
+    Serial.print(inputMessage1);
+    Serial.print("PASS: ");
+    Serial.print(inputMessage2);
+    preferences.putString("ssid", inputMessage1);
+    preferences.putString("pass", inputMessage2);
+    esp_restart();
+    request->redirect("/");
+    
   });
 
    // Route for root / web page
