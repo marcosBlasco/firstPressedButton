@@ -17,6 +17,24 @@
 #include <ESPAsyncWebServer.h>
 #include <Preferences.h>
 
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+// The pins for I2C are defined by the Wire-library. 
+// On an arduino UNO:       A4(SDA), A5(SCL)
+// On an arduino MEGA 2560: 20(SDA), 21(SCL)
+// On an arduino LEONARDO:   2(SDA),  3(SCL), ...
+#define OLED_RESET 23 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define SCREEN_ADDRESS 0x3D ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+
 int result[5] = {0, 0, 0, 0, 0};
 int gameState = 1; //'1' ready, '0' result;
 
@@ -439,30 +457,27 @@ void IRAM_ATTR interruptHndlerButton5() {
     }
 }
 
-void configAP() {
 
-  //WiFiServer configWebServer(80);
-  // Create AsyncWebServer object on port 80
-  
-
-  WiFi.mode(WIFI_AP_STA); // starts the default AP (factory default or setup as persistent)
-  
-  Serial.print("Connect your computer to the WiFi network ");
-#ifdef ESP32
-  Serial.print("to SSID of you ESP32"); // no getter for SoftAP SSID
-#else
-  Serial.print(WiFi.softAPSSID());
-#endif
-  Serial.println();
-  IPAddress ip = WiFi.softAPIP();
-  Serial.print("and enter http://");
-  Serial.print(ip);
-  Serial.println(" in a Web browser");
-}
 
 void setup(){
   // Serial port for debugging purposes
   Serial.begin(115200);
+
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if(!display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }
+
+  // Clear the buffer
+  display.clearDisplay();
+
+  display.setTextSize(1); 
+  display.setTextColor(SSD1306_WHITE);
+  display.setCursor(0,0);
+
+  // Clear the buffer
+  display.clearDisplay();
 
   pinMode(output1, OUTPUT);
   digitalWrite(output1, HIGH);
@@ -510,16 +525,32 @@ void setup(){
 
   // waiting for connection to remembered  Wifi network
   Serial.println("Waiting for connection to WiFi");
+  display.clearDisplay();
+  display.println("Waiting for connection to WiFi");
+  display.display();
   WiFi.waitForConnectResult(10000);
-
+  
+  
+  display.setCursor(0,0);
+  display.clearDisplay();
+  
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println();
     Serial.println("Could not connect to WiFi. Starting configuration AP...");
+    display.clearDisplay();
+    display.println("Could not connect to WiFi. Starting configuration AP...");
+    display.display();
+    delay(2000);
     configAP();
   } else {
     Serial.println("WiFi connected");
+    display.println("WiFi connected");
+    display.display();
     // Print ESP Local IP Address
     Serial.println(WiFi.localIP());
+    display.println(WiFi.localIP());
+    display.display();
+    
   }
 
   // Route for root / web page
@@ -720,7 +751,41 @@ void setup(){
 
   server.begin();
 }
+
+
+void configAP() {
+
+  //WiFiServer configWebServer(80);
+  // Create AsyncWebServer object on port 80
   
+
+  WiFi.mode(WIFI_AP_STA); // starts the default AP (factory default or setup as persistent)
+  
+  Serial.print("Connect your computer to the WiFi network ");
+  display.println("Connect your computer to the WiFi network ");
+  display.display();
+  
+#ifdef ESP32
+  Serial.print("to SSID of you ESP32"); // no getter for SoftAP SSID
+  display.println("to SSID of you ESP32");
+  display.display();
+#else
+  Serial.print(WiFi.softAPSSID());
+#endif
+  Serial.println();
+  IPAddress ip = WiFi.softAPIP();
+  Serial.print("and enter http://");
+  Serial.print(ip);
+  Serial.println(" in a Web browser");
+
+  display.println("and enter");
+  display.print("");
+  display.println(ip);
+  display.println(" in a Web browser");
+  display.display();
+
+}
+
 void loop() {
   // read the state of the switch into a local variable:
   // int reading = digitalRead(buttonPin1);
